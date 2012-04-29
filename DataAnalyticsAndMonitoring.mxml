@@ -1,0 +1,1278 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:Application xmlns:fx="http://ns.adobe.com/mxml/2009"
+				xmlns:s="library://ns.adobe.com/flex/spark"
+				xmlns:mx="library://ns.adobe.com/flex/mx"
+				xmlns:com="com.*"
+				xmlns:programmatic="assets.programmatic.*"
+				width="100%" height="100%" minWidth="955" minHeight="600" backgroundColor="#FFFFFF"
+				creationComplete="init();" layout="absolute" layoutDirection="ltr"
+				preloaderChromeColor="#F9F2F2"
+				initialize="doSend()">
+	<fx:Style source="skinPreview.css"/>
+	
+	<fx:Declarations>
+		<mx:SeriesInterpolate id="interpol" 
+							  duration="1000" 
+							  elementOffset="0" 
+							  minimumElementDuration="200"
+							  />
+		<s:RadioButtonGroup id="radiogroup1"/>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+		
+		<mx:NumberFormatter id="numberFormatter"/>
+	
+		<mx:HTTPService url="http://localhost/DataAdapter.php"
+						id="xmlFromDatabase" 
+						showBusyCursor="true" 
+						result="resultHandler(event)" 
+						method="POST" />
+		<mx:HTTPService url="http://localhost/DataAdapter_summary.php"
+						id="xmlFromDatabase_summary" 
+						showBusyCursor="true" 
+						result="resultHandler1(event)" 
+						method="POST" />
+		<mx:HTTPService url="http://localhost/statusChartDataProvider.php"
+						id="statusChartDataProvider" 
+						showBusyCursor="true" 
+						result="resultHandler2(event)" 
+						method="POST" />
+		<mx:HTTPService url="http://localhost/Monthly_report_enqueued.php"
+						id="Monthly_Report_enqueued" 
+						showBusyCursor="true" 
+						result="resultHandler3(event)" 
+						method="POST" />
+		<mx:HTTPService url="http://localhost/Monthly_report_inprocess.php"
+						id="Monthly_report_inprocess" 
+						showBusyCursor="true" 
+						result="resultHandler4(event)" 
+						method="POST" />
+		<mx:HTTPService url="http://localhost/Monthly_report_paused.php"
+						id="Monthly_report_paused" 
+						showBusyCursor="true" 
+						result="resultHandler5(event)" 
+						method="POST" />
+		<mx:HTTPService url="http://localhost/Monthly_report_successful.php"
+						id="Monthly_report_successful" 
+						showBusyCursor="true" 
+						result="resultHandler6(event)" 
+						method="POST" />
+		<mx:HTTPService url="http://localhost/Monthly_report_fail.php"
+						id="Monthly_report_fail" 
+						showBusyCursor="true" 
+						result="resultHandler7(event)" 
+						method="POST" />
+		<mx:HTTPService url="http://localhost/DataAdapter_summary_inprocess.php"
+						id="DataAdapter_summary_inprocess" 
+						showBusyCursor="true" 
+						result="resultHandler_summary_inprocess(event)" 
+						method="POST" />
+		<mx:HTTPService url="http://localhost/DataAdapter_summary_enqueued.php"
+						id="DataAdapter_summary_enqueued" 
+						showBusyCursor="true" 
+						result="resultHandler_summary_enqueued(event)" 
+						method="POST" />
+		<mx:HTTPService url="http://localhost/DataAdapter_summary_fail.php"
+						id="DataAdapter_summary_fail" 
+						showBusyCursor="true" 
+						result="resultHandler_summary_failed(event)" 
+						method="POST" />
+		
+		
+		<mx:HTTPService id="sendDataForEncoding" url="http://localhost/insertData.php" useProxy="false" method="GET">
+			<mx:request xmlns="">
+				<fname>{fileToSendToXML}</fname>
+				<fpath>{filePath}</fpath>
+				<src>{fileSrcType}</src>
+			</mx:request>
+		</mx:HTTPService>
+		<mx:HTTPService id="sendDataForProcessMaster" url="http://localhost/insertProcessMaster.php" useProxy="false" method="GET">
+			<mx:request xmlns="">
+				<fname>{fileToSendToXML}</fname>
+				<platformname>{platformname}</platformname>
+				<quality>{quality}</quality>
+				<filepath>{filePath}</filepath>
+			</mx:request>
+		</mx:HTTPService>
+		
+	</fx:Declarations>
+	
+	<fx:Script>
+		<![CDATA[
+			import flash.events.MouseEvent;
+			
+			import mx.charts.ChartItem;
+			import mx.charts.HitData;
+			import mx.charts.Legend;
+			import mx.charts.PieChart;
+			import mx.charts.chartClasses.ChartBase;
+			import mx.charts.events.ChartEvent;
+			import mx.charts.events.ChartItemEvent;
+			import mx.charts.series.PieSeries;
+			import mx.collections.ArrayCollection;
+			import mx.containers.ControlBar;
+			import mx.containers.HBox;
+			import mx.containers.Panel;
+			import mx.controls.Alert;
+			import mx.controls.Image;
+			import mx.controls.List;
+			import mx.controls.Text;
+			import mx.controls.VScrollBar;
+			import mx.core.DragSource;
+			import mx.core.IVisualElement;
+			import mx.events.CollectionEvent;
+			import mx.events.DragEvent;
+			import mx.events.IndexChangedEvent;
+			import mx.managers.DragManager;
+			import mx.rpc.events.ResultEvent;
+			import mx.utils.ObjectUtil;
+			
+			import spark.components.Scroller;
+			import spark.components.VGroup;
+
+		private var fileRef:FileReference;
+		private var file:FileFilter;
+		private var filesToBeTranscodedArray:Array = [];
+		private var formats:Array = new Array();	
+		private var filesToBeTranscodedArrayIndex:int = 0;	
+		private var a:String = "testA";
+		private var b:String = "testB";
+		private var c:String = "1 4";
+		[Bindable]	
+		private var fileToSendToXML:String = "Why no?";
+		[Bindable]	
+		private var filePath:String = "C:\\hb\\";
+		[Bindable]	
+		private var fileSrcType:String = "";
+		[Bindable]
+		private var platformname:String = "";
+		[Bindable]
+		private var quality:String = "";
+		[Bindable]	
+		private var datalist:ArrayCollection;
+		private var rowcount:String;
+		[Bindable]
+		private var datalist_summary:ArrayCollection;
+			[Bindable]
+			private var datalist_summary_processing:ArrayCollection;
+			[Bindable]
+			private var datalist_summary_queued:ArrayCollection;
+			[Bindable]
+			private var datalist_summary_failed:ArrayCollection;
+		[Bindable]
+		private var count_summary:ArrayCollection;
+			[Bindable]
+		private var monthlyFilesTranscoded_enqueued:ArrayCollection;
+			[Bindable]
+			private var monthlyFilesTranscoded_fail:ArrayCollection;
+			[Bindable]
+			private var monthlyFilesTranscoded_inprocess:ArrayCollection;
+			[Bindable]
+			private var monthlyFilesTranscoded_successful:ArrayCollection;
+			[Bindable]
+			private var monthlyFilesTranscoded_paused:ArrayCollection;
+			[Bindable]
+			private var status_id:String = "0";
+		private var rowcount_monthlyFilesTranscoded:String;
+		private var rowcount_summary:String;
+		private var rowcount_summary_dashboard:String;
+			
+		private var checkBoxes:Array = [];
+		private var childIndx : int = 0;
+		private var panelChildIndx : int = 0;
+		private var filesSelected:Array =[];
+		private var filesSelectedIndex:int =0;		
+		
+		private var pieRegion:String = "";
+			
+		
+		private const FILE_UPLOAD_URL:String = "http://www.YOUR-WEBSITE-HERE.com/fileref/uploader.cfm";
+			
+		[Bindable]
+		public var MonthlyReport:ArrayCollection;
+		private var newChart:PieChart;
+		private var newSeries:PieSeries;
+			
+		[Bindable]
+		private var explodedPiece:Array;
+		[Bindable]
+		public var newDataProviderAC:ArrayCollection;
+			
+			
+		private function init():void {
+		fileRef = new FileReference();
+		fileRef.addEventListener(Event.SELECT, fileRef_select);
+		fileRef.addEventListener(ProgressEvent.PROGRESS, fileRef_progress);
+		fileRef.addEventListener(Event.COMPLETE, fileRef_complete);
+		}
+		
+		
+		private function browseAndUpload():void {
+		init();	
+		fileRef.browse();
+		message.text = "";
+		fileRef.cancel();
+		
+		}
+		
+		private function fileRef_select(evt:Event):void {
+		try {
+		src.text = fileRef.name;
+		fileRef.upload(new URLRequest(FILE_UPLOAD_URL));
+		} catch (err:Error) {
+		message.text = "ERROR: zero-byte file";
+		}
+		}
+		
+		private function fileRef_progress(evt:ProgressEvent):void {
+		progressBar.visible = true;
+		}
+		
+		private function fileRef_complete(evt:Event):void {
+		message.text += " (complete)";
+		progressBar.visible = false;
+		}
+			
+			protected function populateSelectedFileList(event:MouseEvent):void
+			{
+				// TODO Auto-generated method stub
+				
+			}
+			private function resultHandler(event:ResultEvent):void{                
+				datalist = event.result.data.row;
+				rowcount = event.result.data.numrows;
+				if(rowcount == '1'){
+					datalist.removeItemAt(1);
+				}
+			}
+			
+			private function resultHandler1(event:ResultEvent):void{                
+				datalist_summary = event.result.data.row;
+				rowcount_summary = event.result.data.numrows;
+				if(rowcount_summary == '1'){
+					datalist_summary.removeItemAt(1);
+				}
+			}
+			
+			private function resultHandler2(event:ResultEvent):void{                
+				count_summary = event.result.data.row;
+				rowcount_summary_dashboard = event.result.data.numrows;
+				if(rowcount_summary_dashboard == '1'){
+					count_summary.removeItemAt(1);
+				}
+			}
+			private function resultHandler3(event:ResultEvent):void{                
+				monthlyFilesTranscoded_enqueued = event.result.data.row;
+				var rowcount_monthlyFilesTranscoded:int = parseInt(event.result.data.numrows);
+				
+				for(var i:int = 0;i<monthlyFilesTranscoded_enqueued.length-1;i++)
+				{
+					var s:String = monthlyFilesTranscoded_enqueued.getItemAt(i).MONTH;
+				
+					if(s == "1")
+					{
+						monthlyFilesTranscoded_enqueued.getItemAt(i).MONTH = "January";
+					}
+					else if(s == "2")
+					{
+						monthlyFilesTranscoded_enqueued.getItemAt(i).MONTH = "February";
+					}
+					else if(s == "3")
+					{
+						monthlyFilesTranscoded_enqueued.getItemAt(i).MONTH = "March";
+					}
+					else if(s == "4")
+					{
+						monthlyFilesTranscoded_enqueued.getItemAt(i).MONTH = "April";
+					}
+					else if(s == "5")
+					{
+						monthlyFilesTranscoded_enqueued.getItemAt(i).MONTH = "May";
+					}
+					else if(s == "6")
+					{
+						monthlyFilesTranscoded_enqueued.getItemAt(i).MONTH = "June";
+					}
+					else if(s == "7")
+					{
+						monthlyFilesTranscoded_enqueued.getItemAt(i).MONTH = "July";
+					}
+					else if(s == "8")
+					{
+						monthlyFilesTranscoded_enqueued.getItemAt(i).MONTH = "August";
+					}
+					else if(s == "9")
+					{
+						monthlyFilesTranscoded_enqueued.getItemAt(i).MONTH = "September";
+					}
+					else if(s == "10")
+					{
+						monthlyFilesTranscoded_enqueued.getItemAt(i).MONTH = "October";
+					}
+					else if(s == "11")
+					{
+						monthlyFilesTranscoded_enqueued.getItemAt(i).MONTH = "November";
+					}
+					else if(s == "12")
+					{
+						monthlyFilesTranscoded_enqueued.getItemAt(i).MONTH = "December";
+					}
+				}
+			}
+			private function resultHandler4(event:ResultEvent):void{                
+				monthlyFilesTranscoded_inprocess = event.result.data.row;
+				var rowcount_monthlyFilesTranscoded:String = event.result.data.numrows;
+				if(rowcount_monthlyFilesTranscoded == '1'){
+					//monthlyFilesTranscoded.removeItemAt(1);
+				}
+				for(var i:int = 0;i<monthlyFilesTranscoded_inprocess.length-1;i++)
+				{
+					var s:String = monthlyFilesTranscoded_inprocess.getItemAt(i).MONTH;
+					if(s == "1")
+					{
+						monthlyFilesTranscoded_inprocess.getItemAt(i).MONTH = "January";
+					}
+					else if(s == "2")
+					{
+						monthlyFilesTranscoded_inprocess.getItemAt(i).MONTH = "February";
+					}
+					else if(s == "3")
+					{
+						monthlyFilesTranscoded_inprocess.getItemAt(i).MONTH = "March";
+					}
+					else if(s == "4")
+					{
+						monthlyFilesTranscoded_inprocess.getItemAt(i).MONTH = "April";
+					}
+					else if(s == "5")
+					{
+						monthlyFilesTranscoded_inprocess.getItemAt(i).MONTH = "May";
+					}
+					else if(s == "6")
+					{
+						monthlyFilesTranscoded_inprocess.getItemAt(i).MONTH = "June";
+					}
+					else if(s == "7")
+					{
+						monthlyFilesTranscoded_inprocess.getItemAt(i).MONTH = "July";
+					}
+					else if(s == "8")
+					{
+						monthlyFilesTranscoded_inprocess.getItemAt(i).MONTH = "August";
+					}
+					else if(s == "9")
+					{
+						monthlyFilesTranscoded_inprocess.getItemAt(i).MONTH = "September";
+					}
+					else if(s == "10")
+					{
+						monthlyFilesTranscoded_inprocess.getItemAt(i).MONTH = "October";
+					}
+					else if(s == "11")
+					{
+						monthlyFilesTranscoded_inprocess.getItemAt(i).MONTH = "November";
+					}
+					else if(s == "12")
+					{
+						monthlyFilesTranscoded_inprocess.getItemAt(i).MONTH = "December";
+					}
+				}
+			}
+			
+			private function resultHandler5(event:ResultEvent):void{  
+				monthlyFilesTranscoded_paused = event.result.data.row;
+				var rowcount_monthlyFilesTranscoded:String = event.result.data.numrows;
+				if(rowcount_monthlyFilesTranscoded == '1'){
+					//monthlyFilesTranscoded.removeItemAt(1);
+				}
+				for(var i:int = 0;i<monthlyFilesTranscoded_paused.length-1;i++)
+				{
+					var s:String = monthlyFilesTranscoded_paused.getItemAt(i).MONTH;
+					if(s == "1")
+					{
+						monthlyFilesTranscoded_paused.getItemAt(i).MONTH = "January";
+					}
+					else if(s == "2")
+					{
+						monthlyFilesTranscoded_paused.getItemAt(i).MONTH = "February";
+					}
+					else if(s == "3")
+					{
+						monthlyFilesTranscoded_paused.getItemAt(i).MONTH = "March";
+					}
+					else if(s == "4")
+					{
+						monthlyFilesTranscoded_paused.getItemAt(i).MONTH = "April";
+					}
+					else if(s == "5")
+					{
+						monthlyFilesTranscoded_paused.getItemAt(i).MONTH = "May";
+					}
+					else if(s == "6")
+					{
+						monthlyFilesTranscoded_paused.getItemAt(i).MONTH = "June";
+					}
+					else if(s == "7")
+					{
+						monthlyFilesTranscoded_paused.getItemAt(i).MONTH = "July";
+					}
+					else if(s == "8")
+					{
+						monthlyFilesTranscoded_paused.getItemAt(i).MONTH = "August";
+					}
+					else if(s == "9")
+					{
+						monthlyFilesTranscoded_paused.getItemAt(i).MONTH = "September";
+					}
+					else if(s == "10")
+					{
+						monthlyFilesTranscoded_paused.getItemAt(i).MONTH = "October";
+					}
+					else if(s == "11")
+					{
+						monthlyFilesTranscoded_paused.getItemAt(i).MONTH = "November";
+					}
+					else if(s == "12")
+					{
+						monthlyFilesTranscoded_paused.getItemAt(i).MONTH = "December";
+					}
+				}
+			}
+			private function resultHandler6(event:ResultEvent):void{  
+				monthlyFilesTranscoded_successful = event.result.data.row;
+				var rowcount_monthlyFilesTranscoded:String = event.result.data.numrows;
+				if(rowcount_monthlyFilesTranscoded == '1'){
+					//monthlyFilesTranscoded.removeItemAt(1);
+				}
+				for(var i:int = 0;i<monthlyFilesTranscoded_successful.length-1;i++)
+				{
+					var s:String = monthlyFilesTranscoded_successful.getItemAt(i).MONTH;
+					if(s == "1")
+					{
+						monthlyFilesTranscoded_successful.getItemAt(i).MONTH = "January";
+					}
+					else if(s == "2")
+					{
+						monthlyFilesTranscoded_successful.getItemAt(i).MONTH = "February";
+					}
+					else if(s == "3")
+					{
+						monthlyFilesTranscoded_successful.getItemAt(i).MONTH = "March";
+					}
+					else if(s == "4")
+					{
+						monthlyFilesTranscoded_successful.getItemAt(i).MONTH = "April";
+					}
+					else if(s == "5")
+					{
+						monthlyFilesTranscoded_successful.getItemAt(i).MONTH = "May";
+					}
+					else if(s == "6")
+					{
+						monthlyFilesTranscoded_successful.getItemAt(i).MONTH = "June";
+					}
+					else if(s == "7")
+					{
+						monthlyFilesTranscoded_successful.getItemAt(i).MONTH = "July";
+					}
+					else if(s == "8")
+					{
+						monthlyFilesTranscoded_successful.getItemAt(i).MONTH = "August";
+					}
+					else if(s == "9")
+					{
+						monthlyFilesTranscoded_successful.getItemAt(i).MONTH = "September";
+					}
+					else if(s == "10")
+					{
+						monthlyFilesTranscoded_successful.getItemAt(i).MONTH = "October";
+					}
+					else if(s == "11")
+					{
+						monthlyFilesTranscoded_successful.getItemAt(i).MONTH = "November";
+					}
+					else if(s == "12")
+					{
+						monthlyFilesTranscoded_successful.getItemAt(i).MONTH = "December";
+					}
+				}
+			}
+			private function resultHandler7(event:ResultEvent):void{  
+				monthlyFilesTranscoded_fail = event.result.data.row;
+				var rowcount_monthlyFilesTranscoded:String = event.result.data.numrows;
+				if(rowcount_monthlyFilesTranscoded == '1'){
+					//monthlyFilesTranscoded.removeItemAt(1);
+				}
+				for(var i:int = 0;i<monthlyFilesTranscoded_fail.length-1;i++)
+				{
+					var s:String = monthlyFilesTranscoded_fail.getItemAt(i).MONTH;
+					if(s == "1")
+					{
+						monthlyFilesTranscoded_fail.getItemAt(i).MONTH = "January";
+					}
+					else if(s == "2")
+					{
+						monthlyFilesTranscoded_fail.getItemAt(i).MONTH = "February";
+					}
+					else if(s == "3")
+					{
+						monthlyFilesTranscoded_fail.getItemAt(i).MONTH = "March";
+					}
+					else if(s == "4")
+					{
+						monthlyFilesTranscoded_fail.getItemAt(i).MONTH = "April";
+					}
+					else if(s == "5")
+					{
+						monthlyFilesTranscoded_fail.getItemAt(i).MONTH = "May";
+					}
+					else if(s == "6")
+					{
+						monthlyFilesTranscoded_fail.getItemAt(i).MONTH = "June";
+					}
+					else if(s == "7")
+					{
+						monthlyFilesTranscoded_fail.getItemAt(i).MONTH = "July";
+					}
+					else if(s == "8")
+					{
+						monthlyFilesTranscoded_fail.getItemAt(i).MONTH = "August";
+					}
+					else if(s == "9")
+					{
+						monthlyFilesTranscoded_fail.getItemAt(i).MONTH = "September";
+					}
+					else if(s == "10")
+					{
+						monthlyFilesTranscoded_fail.getItemAt(i).MONTH = "October";
+					}
+					else if(s == "11")
+					{
+						monthlyFilesTranscoded_fail.getItemAt(i).MONTH = "November";
+					}
+					else if(s == "12")
+					{
+						monthlyFilesTranscoded_fail.getItemAt(i).MONTH = "December";
+					}
+				}
+			}
+			private function resultHandler_summary_enqueued(event:ResultEvent)
+			{
+				datalist_summary_queued = event.result.data.row;
+				rowcount = event.result.data.numrows;
+				if(rowcount == '1'){
+					datalist_summary_queued.removeItemAt(1);
+				}
+			}
+			private function resultHandler_summary_failed(event:ResultEvent)
+			{
+				datalist_summary_failed = event.result.data.row;
+				rowcount = event.result.data.numrows;
+				if(rowcount == '1'){
+					datalist_summary_failed.removeItemAt(1);
+				}
+			}
+			private function resultHandler_summary_inprocess(event:ResultEvent)
+			{
+				datalist_summary_processing = event.result.data.row;
+				rowcount = event.result.data.numrows;
+				if(rowcount == '1'){
+					datalist_summary_processing.removeItemAt(1);
+				}
+			}
+			public function doSend():void {
+				xmlFromDatabase.url = "http://localhost/DataAdapter.php";
+				xmlFromDatabase.send();
+				
+				xmlFromDatabase_summary.url = "http://localhost/DataAdapter_summary.php";
+				xmlFromDatabase_summary.send();
+				
+				statusChartDataProvider.url = "http://localhost/statusChartDataProvider.php";
+				statusChartDataProvider.send();
+				
+				Monthly_Report_enqueued.url = "http://localhost/Monthly_report_enqueued.php";
+				Monthly_Report_enqueued.send();
+				
+				Monthly_report_inprocess.url = "http://localhost/Monthly_report_inprocess.php";
+				Monthly_report_inprocess.send();
+				
+				Monthly_report_paused.url = "http://localhost/Monthly_report_paused.php";
+				Monthly_report_paused.send();
+				
+				Monthly_report_successful.url = "http://localhost/Monthly_report_successful.php";
+				Monthly_report_successful.send();
+				
+				DataAdapter_summary_enqueued.url = "http://localhost/DataAdapter_summary_enqueued.php";
+				DataAdapter_summary_enqueued.send();
+				
+				DataAdapter_summary_fail.url = "http://localhost/DataAdapter_summary_fail.php";
+				DataAdapter_summary_fail.send();
+				
+				DataAdapter_summary_inprocess.url = "http://localhost/DataAdapter_summary_inprocess.php";
+				DataAdapter_summary_inprocess.send();
+			}
+			protected function populateSelectedFilesList(): void {
+				var checkbx:mx.controls.CheckBox = new mx.controls.CheckBox();
+				var flag:Boolean = false; 
+				for(var i:int = 0; i<filesToBeTranscodedArrayIndex;i++)
+				{
+					if(filesToBeTranscodedArray[i] == src.text && filesToBeTranscodedArray[i]!=null)
+					{
+						flag = true;
+						Alert.show("File has already been added. Select other file.");
+					}
+				}
+				if(flag == false)
+				{
+					if(src.text == "")
+					{
+						Alert.show("Please select a file from the browse dialox box");
+					}
+					
+					else 
+					{
+						var extInd:int = src.text.lastIndexOf(".");
+						var ext:String = src.text.substring(extInd+1,src.text.length);
+						if(ext != "mp4" && ext != "mkv" && ext != "flv")
+						{
+							Alert.show("Please select a file with .mp4, .flv or .mkv extension");
+						}
+						else
+						{
+							filesToBeTranscodedArray[filesToBeTranscodedArrayIndex++] = src.text;
+							checkbx.label = src.text;
+							checkbx.selected = true;
+							selectedFilesList.addChildAt(checkbx, childIndx);
+							checkBoxes.push(checkbx);
+							childIndx = childIndx + 1;
+						}
+					}
+				}
+			}
+			protected function deleteAudio() : void {
+				for(var i:int = 0;i< checkBoxes.length;i++ )
+				{
+					if(!checkBoxes[i].selected)
+					{
+						selectedFilesList.removeChildAt(i);
+						
+						
+						for(var j:int = 0;j<filesToBeTranscodedArrayIndex;j++)
+						{
+							if(filesToBeTranscodedArray[j] == checkBoxes[i].label)
+							{
+								filesToBeTranscodedArray[j] = null;
+							}
+						}
+						checkBoxes[i] = null;
+					}
+				}
+			}
+			protected function sendFilesToTranscoding() : void {	
+				var vgroup:VGroup = new VGroup();
+				var numberPanels:int = 0;
+				for(var i:int = 0;i< checkBoxes.length;i++ )
+				{
+					if(checkBoxes[i]!=null)
+					{
+						if(checkBoxes[i].selected)
+						{
+							var panel:spark.components.Panel=new spark.components.Panel();
+							//var panel1:mx.containers.Panel
+							panel.width=635;
+							panel.height=165;
+							panel.title="C:\\Data Source\\"+checkBoxes[i].label;
+							filesSelected[filesSelectedIndex++] = panel.title;
+							panel.name = "panel"+i;
+							
+							var l:mx.controls.Label;
+							l=new mx.controls.Label();
+							l.x=53;
+							l.y=10;
+							l.text="Android";
+							panel.addElementAt(l,0);
+							
+							l=new mx.controls.Label();
+							l.x=53;
+							l.y=46;
+							l.text="BB";
+							panel.addElement(l);
+							
+							l=new mx.controls.Label();
+							l.x=53;
+							l.y=85;
+							l.text="PC";
+							panel.addElement(l);
+							
+							
+							var ch2:mx.controls.CheckBox;
+							ch2=new mx.controls.CheckBox();
+							
+							ch2=new mx.controls.CheckBox();
+							ch2.x=158;
+							ch2.y=10;
+							ch2.label="Low Quality";
+							ch2.name = "l"+i+"c1";
+							panel.addElement(ch2);
+							
+							ch2=new mx.controls.CheckBox();
+							ch2.x=158;
+							ch2.y=46;
+							ch2.label="Low Quality";
+							ch2.name="cb2";
+							ch2.name = "l"+i+"c4";
+							panel.addElement(ch2);
+							
+							ch2=new mx.controls.CheckBox();
+							ch2.x=158;
+							ch2.y=85;
+							ch2.label="Low Quality";
+							ch2.name = "l"+i+"c7";
+							panel.addElement(ch2);
+							
+							ch2=new mx.controls.CheckBox();
+							ch2.x=305;
+							ch2.y=10;
+							ch2.label="Medium Quality";
+							ch2.name = "l"+i+"c2";
+							panel.addElement(ch2);
+							
+							ch2=new mx.controls.CheckBox();
+							ch2.x=305;
+							ch2.y=46;
+							ch2.label="Medium Quality";
+							ch2.name="cb3";
+							ch2.name = "l"+i+"c5";
+							panel.addElement(ch2);
+							
+							ch2=new mx.controls.CheckBox();
+							ch2.x=305;
+							ch2.y=85;
+							ch2.label="Medium Quality";
+							ch2.name = "l"+i+"c8";
+							panel.addElement(ch2);
+							
+							ch2=new mx.controls.CheckBox();
+							ch2.x=482;
+							ch2.y=10;
+							ch2.label="High Quality";
+							ch2.name = "l"+i+"c3";
+							panel.addElement(ch2);	
+							
+							ch2=new mx.controls.CheckBox();
+							ch2.x=482;
+							ch2.y=46;
+							ch2.label="High Quality";
+							ch2.name = "l"+i+"c6";
+							panel.addElement(ch2);	
+							
+							ch2=new mx.controls.CheckBox();
+							ch2.x=482;
+							ch2.y=85;
+							ch2.label="High Quality";
+							ch2.name = "l"+i+"c9";
+							panel.addElement(ch2);
+							
+							vgroup.addElementAt(panel,numberPanels++);
+							
+						}
+					}
+					
+				}
+				ChooseFormat.addElement(vgroup);
+				
+			}
+			
+			
+			protected function processFiles() : void {
+				for(var i:int=0;i<filesToBeTranscodedArrayIndex;i++)
+				{
+					formats[i] = new Array();
+					for(var j:int=0;j<9;j++)
+					{
+						formats[i][j] = 0;
+					}
+				}
+				
+				for each(var dispObj1:DisplayObject in ChooseFormat.getChildren())
+				{
+					if(dispObj1 is VGroup)
+					{
+						var vgrp:VGroup = dispObj1 as VGroup;
+						for(var j:int = 0;j<filesToBeTranscodedArrayIndex;j++)
+						{
+							var panel:spark.components.Panel = vgrp.getElementAt(j) as spark.components.Panel;
+							for(var k:int = 3;k<12;k++)
+							{
+								var ch:CheckBox = panel.getElementAt(k)as mx.controls.CheckBox;
+								if(ch.selected == true)
+								{
+									formats[j][k-3] = 1;
+								}
+								else
+								{
+									formats[j][k-3] = 0;
+								}
+							}
+						}
+					}
+				}
+				
+				for(var i:int = 0;i<filesToBeTranscodedArrayIndex;i++)
+				{
+					fileToSendToXML = filesToBeTranscodedArray[i];
+					fileSrcType = fileToSendToXML.substr(fileToSendToXML.length-3,3);
+					filePath = "C:\\\\hb";
+					sendDataForEncoding.send();
+				}
+				for(var i:int = 0;i<filesToBeTranscodedArrayIndex;i++)
+				{
+					for(var j:int = 0;j<9;j++)
+					{
+						if(j == 0 && formats[i][j] == 1)
+						{
+							platformname="Android";
+							quality="Low Quality";
+							fileToSendToXML = filesToBeTranscodedArray[i];
+							sendDataForProcessMaster.send();
+							
+						}
+						else if(j == 1 && formats[i][j] == 1)
+						{
+							platformname="BlackBerry";
+							quality="Low Quality";
+							fileToSendToXML = filesToBeTranscodedArray[i];
+							sendDataForProcessMaster.send();
+							
+						}
+						else if(j == 2 && formats[i][j] == 1)
+						{
+							platformname="PC";
+							quality="Low Quality";
+							fileToSendToXML = filesToBeTranscodedArray[i];
+							sendDataForProcessMaster.send();
+							
+						}
+						else if(j == 3 && formats[i][j] == 1)
+						{
+							platformname="Android";
+							quality="Medium Quality";
+							fileToSendToXML = filesToBeTranscodedArray[i];
+							sendDataForProcessMaster.send();
+							
+						}
+						else if(j == 4 && formats[i][j] == 1)
+						{
+							platformname="BlackBerry";
+							quality="Medium Quality";
+							fileToSendToXML = filesToBeTranscodedArray[i];
+							sendDataForProcessMaster.send();
+							
+						}
+						else if(j == 5 && formats[i][j] == 1)
+						{
+							platformname="PC";
+							quality="Medium Quality";
+							fileToSendToXML = filesToBeTranscodedArray[i];
+							sendDataForProcessMaster.send();
+							
+						}
+						else if(j == 6 && formats[i][j] == 1)
+						{
+							platformname="Android";
+							quality="High Quality";
+							fileToSendToXML = filesToBeTranscodedArray[i];
+							sendDataForProcessMaster.send();
+							
+						}
+						else if(j == 7 && formats[i][j] == 1)
+						{
+							platformname="BlackBerry";
+							quality="High Quality";
+							fileToSendToXML = filesToBeTranscodedArray[i];
+							sendDataForProcessMaster.send();
+							
+						}
+						else if(j == 8 && formats[i][j] == 1)
+						{
+							platformname="PC";
+							quality="High Quality";
+							fileToSendToXML = filesToBeTranscodedArray[i];
+							sendDataForProcessMaster.send();
+							
+						}
+					}
+				}
+				
+				pages.selectedIndex=pages.getChildIndex(pages.getChildByName('Monitoring'))
+			}
+			
+			protected function piechart1_itemClickHandler(event:Event):void { 
+				var allSeries:Array = event.currentTarget.series;
+				var t:String = "Omg";
+				for (var i:int=0; i<allSeries.length; i++) {
+					t += "\n" + allSeries[i].id + 
+						" Selected Items: " + allSeries[i].selectedIndices;
+				}
+				Alert.show(t);
+			}
+			
+		]]>
+	</fx:Script>
+
+
+	<mx:ViewStack id="pages" x="0" y="1" width="100%" height="100%" dropShadowVisible="true"
+				  selectedIndex="5">
+		<!-- Page index 0 -->
+		<mx:Canvas id="ChooseFormat">
+			<mx:Button x="734" y="59" width="135" height="42" label ="Process" chromeColor="#D3D8DC" color="#000000" fontFamily="Courier New"
+					   fontSize="14" click = "processFiles();"/>
+			<mx:Button x="734" y="144" width="135" height="42" label ="Back" chromeColor="#D3D8DC" color="#000000" fontFamily="Courier New"
+					   fontSize="14" click = "pages.selectedIndex=pages.getChildIndex(pages.getChildByName('SelectFiles'))"/>
+		</mx:Canvas>
+		
+		
+		<!-- Page index 1 -->
+		<mx:Canvas id="SelectFiles">
+			<s:Panel width="922" height="564" cornerRadius="15" horizontalCenter="0"
+					 title="Mime360 - Audio Analytics tool and Dashboard" verticalCenter="-7">
+				<mx:Button x="725" y="-15" width="144" height="53" label="Home" chromeColor="#D3D8DC"
+						   color="#000000" fontFamily="Courier New" click="pages.selectedIndex=pages.getChildIndex(pages.getChildByName('home'))"/>
+				<mx:Label id="message" x="345" y="90"/>
+				<mx:ProgressBar id="progressBar" visible="false" x="177" y="439" indeterminate="true"/>
+				<s:Label x="303" y="94" fontSize="30"/>
+				<mx:VRule x="457" y="26" width="2" height="479"/>
+				<s:Panel x="496" y="59" width="373" height="436" title="Selected Files">
+					
+					<mx:VBox id="selectedFilesList" x="10" y="11" width="351" height="285">
+					</mx:VBox>
+					
+					<mx:Button x="45" y="331" width="143" height="50" label="Remove Unselected"
+							   chromeColor="#D3D8DC" color="#000000" fontFamily="Courier New"
+							   fontSize="14" click="deleteAudio();"/>
+					<s:Panel name="abc" x="516" y="88" width="353" height="293" title="Selected Files">
+						<mx:List id="list0" x="59" y="10" width="244" height="183"
+								 alternatingItemColors="[#EEEEEE, white]"
+								 rowCount="8">
+							<mx:itemRenderer>
+								<fx:Component>
+									<s:CheckBox label="Checkbox1"/>
+								</fx:Component>
+									
+							</mx:itemRenderer>
+						</mx:List>
+						<mx:Button x="59" y="208" width="143" height="33" label="Remove Selected" chromeColor="#D3D8DC"
+								   color="#000000" fontFamily="Courier New" />
+					</s:Panel>
+					<s:Panel x="516" y="88" width="353" height="293" title="Selected Files">
+						<mx:List id="list1" x="59" y="10" width="244" height="183"
+								 alternatingItemColors="[#EEEEEE, white]"
+								 rowCount="8">
+							<mx:itemRenderer>
+								<fx:Component>
+									<s:CheckBox label="Checkbox1"/>
+								</fx:Component>
+									
+							</mx:itemRenderer>
+						</mx:List>
+						<mx:Button x="59" y="208" width="143" height="33" label="Remove Selected" chromeColor="#D3D8DC"
+								   color="#000000" fontFamily="Courier New" />
+						<s:Panel x="516" y="88" width="353" height="293" title="Selected Files">
+							<mx:List id="list2" x="59" y="10" width="244" height="183"
+									 alternatingItemColors="[#EEEEEE, white]"
+									 rowCount="8">
+								<mx:itemRenderer>
+									<fx:Component>
+										<s:CheckBox label="Checkbox1"/>
+									</fx:Component>
+										
+								</mx:itemRenderer>
+							</mx:List>
+							<mx:Button x="59" y="208" width="143" height="33" label="Remove Selected" chromeColor="#D3D8DC"
+									   color="#000000" fontFamily="Courier New" />
+						</s:Panel>
+					</s:Panel>
+					<mx:Button x="219" y="331" width="144" height="50" label="OK" click="sendFilesToTranscoding();pages.selectedIndex=0" chromeColor="#D3D8DC"
+							   color="#000000" fontFamily="Courier New"/>
+				</s:Panel>
+				<s:Panel x="27" y="59" width="391" height="436" title="Select files to transcode">
+					<s:TextInput id="src" x="11" y="10" width="246"/>
+					<mx:Button x="123" y="332" width="144" height="50" label="Add Selected" chromeColor="#D3D8DC"
+							   color="#000000" fontFamily="Courier New" click="populateSelectedFilesList();"/>
+					<mx:Button x="265" y="10" width="104" height="30" label="Browse"
+							   chromeColor="#D3D8DC" click="browseAndUpload();" color="#000000"
+							   fontFamily="Courier New"/>
+				</s:Panel>
+				</s:Panel>
+		</mx:Canvas>
+		
+		<!-- Page index 2 -->
+		<mx:Canvas id="loggingScreen1">
+			<s:Panel width="922" height="564" cornerRadius="15" horizontalCenter="0"
+						 verticalCenter="-7">
+				<s:Label x="64" y="138" fontSize="20" fontWeight="bold" text="Choose Content Owner"/>
+				<s:Label x="64" y="272" fontSize="20" fontWeight="bold" text="Choose Releasing Banner"/>
+				<mx:Button x="725" y="-15" width="144" height="53" label="Home" chromeColor="#D3D8DC"
+						  color="#000000" fontFamily="Courier New" click="pages.selectedIndex=pages.getChildIndex(pages.getChildByName('home'))"/>
+				<mx:Button x="573" y="-15" width="144" height="53" label="Monitor" chromeColor="#CBCFD2"
+						  color="#000000" fontFamily="Courier New" click="pages.selectedIndex=4"/>
+				<mx:VRule x="457" y="10" width="3" height="511"/>
+				<mx:Accordion x="517" y="43" width="371" height="460" dropShadowVisible="true" color="#000000" >
+					<mx:Form label="Processed List">
+						
+					</mx:Form>
+					<s:NavigatorContent width="100%" height="100%" label="Failed">
+					</s:NavigatorContent>
+					<mx:Form label="Unprocessed List">
+						
+					</mx:Form>
+					<mx:Form label="Inprocess List">
+						
+					</mx:Form>
+				</mx:Accordion>
+				<mx:Button x="64" y="439" width="144" height="53" label="Summary View" chromeColor="#D3D8DC"
+						   color="#000000" fontFamily="Courier New" click="pages.getChildIndex(pages.getChildByName('SummaryView'))"/>
+				<s:ComboBox x="72" y="181" width="249" height="34">
+					<s:ArrayCollection>
+						<fx:String>All</fx:String>
+						<fx:String>AL</fx:String>
+						<fx:String>AR</fx:String>
+					</s:ArrayCollection>
+				</s:ComboBox>
+				<s:ComboBox x="72" y="327" width="249" height="34">
+					<s:ArrayCollection>
+						<fx:String>All</fx:String>
+						<fx:String>AL</fx:String>
+						<fx:String>AR</fx:String>
+					</s:ArrayCollection>
+				</s:ComboBox>
+			</s:Panel>
+		</mx:Canvas> 
+		
+		<!-- Page index 3 -->
+<mx:Canvas id="SummaryView">
+	<s:Panel x="10" y="-6" width="945" height="564" cornerRadius="15">
+		<mx:Button x="725" y="-15" width="144" height="53" label="Home" chromeColor="#D3D8DC"
+				   color="#000000" fontFamily="Courier New" click="pages.selectedIndex=pages.getChildIndex(pages.getChildByName('home'))"/>
+		<mx:Button x="573" y="-15" width="144" height="53" label="Monitor" chromeColor="#CBCFD2"
+				   color="#000000" fontFamily="Courier New" click="pages.selectedIndex=4"/>
+		<mx:Button x="49" y="-16" width="195" height="53" label="Statistics" chromeColor="#CBCFD2"
+				   color="#000000" fontFamily="Courier New" click="pages.selectedIndex=pages.getChildIndex(pages.getChildByName('Monthly_Report'))"/>
+		
+		<s:TabBar x="55" y="99" dataProvider="{myViewStack}"/>
+		
+		
+		<mx:ViewStack id="myViewStack" x="55" y="99" width="666" height="353"> 
+			
+			<s:NavigatorContent id="ProcessedFiles" label="Processed Files"> 
+				<mx:DataGrid x="0" y="24" width="664" height="329" dataProvider="{datalist_summary}">
+					<mx:columns>
+						<mx:DataGridColumn draggable="true" headerText="Audio" dataField="file_name"/>
+						<mx:DataGridColumn draggable="true" headerText="Audio Source Path" dataField="file_path"/>
+						<mx:DataGridColumn draggable="true" headerText="Finish Time" dataField="dte_update"/>
+					</mx:columns>
+				</mx:DataGrid>
+			</s:NavigatorContent>
+			
+			<s:NavigatorContent id="ProcessingFiles" label="Processing Files">
+				<mx:DataGrid x="0" y="24" width="664" height="329" variableRowHeight="true" dataProvider="{datalist_summary_processing}">
+					<mx:columns>
+						<mx:DataGridColumn draggable="true" headerText="Audio" dataField="file_name"/>
+						<mx:DataGridColumn draggable="true" headerText="Audio Source Path" dataField="file_path"/>
+						<mx:DataGridColumn draggable="true" headerText="Last Updated" dataField="dte_update"/>
+					</mx:columns>
+				</mx:DataGrid>
+			</s:NavigatorContent> 
+			
+			<s:NavigatorContent id="QueuedFiles" label="Queued Files"> 
+				<mx:DataGrid x="0" y="24" width="664" height="329" dataProvider="{datalist_summary_queued}">
+					<mx:columns>
+						<mx:DataGridColumn draggable="true" headerText="Audio" dataField="file_name"/>
+						<mx:DataGridColumn draggable="true" headerText="Audio Source Path" dataField="file_path"/>
+						<mx:DataGridColumn draggable="true" headerText="Last Updated" dataField="dte_update"/>
+					</mx:columns>
+				</mx:DataGrid>
+			</s:NavigatorContent>
+			<s:NavigatorContent id="FailedFiles" label="Failed Files"> 
+				<mx:DataGrid x="0" y="24" width="664" height="329" dataProvider="{datalist_summary_failed}">
+					<mx:columns>
+						<mx:DataGridColumn draggable="true" headerText="Audio" dataField="file_name"/>
+						<mx:DataGridColumn draggable="true" headerText="Audio Source Path" dataField="file_path"/>
+						<mx:DataGridColumn draggable="true" headerText="Last Updated" dataField="dte_update"/>
+						<mx:DataGridColumn draggable="true" headerText="Reason for Failure"/>
+					</mx:columns>
+				</mx:DataGrid>
+			</s:NavigatorContent>
+		</mx:ViewStack> 
+		
+	</s:Panel>
+	</mx:Canvas>
+		<!-- Page index 4 -->
+		<mx:Canvas id="Monitoring">
+			<s:Panel width="922" height="564" cornerRadius="15" horizontalCenter="0"
+					 title="Data Transcoding Monitor" verticalCenter="-7">
+				<mx:Button x="725" y="-15" width="144" height="53" label="Home" chromeColor="#D3D8DC"
+						   color="#000000" fontFamily="Courier New" click="pages.selectedIndex=pages.getChildIndex(pages.getChildByName('home'))"/>
+				<mx:Button x="239" y="27" width="144" height="53" label="Refresh" chromeColor="#D3D8DC"
+						  color="#000000" fontFamily="Courier New" click="{xmlFromDatabase.send();}"/>
+				<mx:CheckBox x="413" y="37" label="Update every 15 seconds"/>
+				
+						<mx:DataGrid width="894" height="385" dropShadowVisible="true"
+									 horizontalCenter="0" verticalCenter="44" dataProvider="{datalist}">
+							<mx:columns>
+								<mx:DataGridColumn headerText="Video" dataField="file_name"/>
+									
+								<mx:DataGridColumn headerText="Platform" dataField="platform_name"/>
+								<mx:DataGridColumn headerText="Quality" dataField="quality_name"/>
+								<mx:DataGridColumn headerText="Status" dataField="status_desc"/>
+							</mx:columns>
+						</mx:DataGrid>
+				
+				
+					
+			</s:Panel>
+		</mx:Canvas>
+		<!-- Page index 5 -->
+		<mx:Canvas id="home">
+			<s:Panel width="922" height="564" cornerRadius="15" horizontalCenter="0"
+					 verticalCenter="-7" title="Mime360 - Audio Analytics tool and Dashboard">
+				<mx:VRule x="310" y="65" width="1" height="423"/>
+				<mx:VRule x="615" y="65" width="1" height="423"/>
+				<s:Panel x="35" y="94" width="250" height="344" fontStyle="normal" fontWeight="normal"
+						 textAlign="center" title="Transcode">
+					<mx:Button x="45" y="227" width="159" height="61" label="Transcode" chromeColor="#D3D8DC"
+							   color="#000000" fontFamily="Courier New" click="pages.selectedIndex=pages.getChildIndex(pages.getChildByName('SelectFiles'))"/>
+					<s:Label x="10" y="10" width="228" height="201" fontSize="20"
+							 text="Browse, select and transcode videos to a specified format for a particular platform"
+							 textAlign="right" verticalAlign="middle"/>
+				</s:Panel>
+				<s:Panel x="342" y="94" width="250" height="344" title="Monitor">
+					<mx:Button x="44" y="229" width="159" height="61" label="Monitor" chromeColor="#D3D8DC"
+							   color="#000000" fontFamily="Courier New" click="pages.selectedIndex=pages.getChildIndex(pages.getChildByName('Monitoring'))"/>
+					<s:Label x="10" y="10" width="228" height="201" fontSize="20"
+							 text="Monitor the progress of videos being currently transcoded"
+							 textAlign="right" verticalAlign="middle"/>
+				</s:Panel>
+				<s:Panel x="641" y="97" width="250" height="344" title="View Summary">
+					<mx:Button x="45" y="225" width="159" height="61" label="View Summary" chromeColor="#D3D8DC"
+							   color="#000000" fontFamily="Courier New" click="pages.selectedIndex=pages.getChildIndex(pages.getChildByName('SummaryView'))"/>
+					<s:Label x="10" y="10" width="228" height="201" fontSize="20"
+							 text="View the summary of videos being processed, processed and queued"
+							 textAlign="right" verticalAlign="middle"/>
+				</s:Panel>
+				
+			</s:Panel>
+		</mx:Canvas>
+		<!-- Page index 6 -->
+		<mx:Canvas id="dashboard">
+			<s:Panel width="922" height="564" cornerRadius="15" horizontalCenter="0"
+					 verticalCenter="-7" title="Files Status Dashboard">
+			<mx:PieChart id="status" x="26" y="27" dataProvider="{count_summary}" showDataTips="true" itemClick="piechart1_itemClickHandler(event)">
+				<mx:series>
+					<mx:PieSeries displayName="Series 1" nameField="status_desc" field="count(*)"/>
+				</mx:series>
+			</mx:PieChart>
+			<mx:Legend x="29" y="417" width="284" dataProvider="{status}"/>
+				
+				<mx:DataGrid x="488" y="66" width="353" height="400" dataProvider="{count_summary}">
+					<mx:columns>
+							<mx:DataGridColumn dataField="status_desc" headerText="Status"/>
+							<mx:DataGridColumn dataField="count(*)" headerText="Number of Files"/>
+					</mx:columns>
+				</mx:DataGrid>
+				<mx:VRule x="448" y="27" width="32" height="453"/>
+				<mx:Button x="725" y="-15" width="144" height="53" label="Home" chromeColor="#D3D8DC" color="#000000" fontFamily="Courier New" click="pages.selectedIndex=pages.getChildIndex(pages.getChildByName('home'))"/>
+				<mx:Button x="569" y="-14" width="144" height="53" label="Statistics" chromeColor="#D3D8DC" color="#000000" fontFamily="Courier New" click="pages.selectedIndex=pages.getChildIndex(pages.getChildByName('SummaryView'))"/>
+			</s:Panel>
+				
+		</mx:Canvas>
+			<mx:Canvas id="Monthly_Report">
+				<s:Panel width="896" height="520" cornerRadius="15" horizontalCenter="0"
+						 verticalCenter="-7" title="Monthly Status Report">
+					<mx:Button x="725" y="-15" width="144" height="53" label="Home" chromeColor="#D3D8DC" color="#000000" fontFamily="Courier New" click="pages.selectedIndex=pages.getChildIndex(pages.getChildByName('home'))"/>
+					<mx:Button x="569" y="-16" width="144" height="53" label="Overview" chromeColor="#D3D8DC" color="#000000" fontFamily="Courier New" click="pages.selectedIndex=pages.getChildIndex(pages.getChildByName('dashboard'))"/>
+					<s:TabBar x="55" y="454" dataProvider="{stats}"/>
+					<mx:ViewStack x="24" y="28" width="844" height="426" id="stats">
+						<s:NavigatorContent width="100%" height="100%" label="Enqueued">
+							<mx:ColumnChart id="enqueuedChart" x="236" y="10" width="378" height="337" dataProvider="{monthlyFilesTranscoded_enqueued}">
+								<mx:horizontalAxis>
+									<mx:CategoryAxis 
+										dataProvider="{monthlyFilesTranscoded_enqueued}" 
+										categoryField="MONTH"
+										/>
+								</mx:horizontalAxis>
+								<mx:series>
+									<mx:ColumnSeries displayName="Enqueued Files" yField="total"/>
+								</mx:series>
+							</mx:ColumnChart>
+							<mx:Legend x="138" y="294" dataProvider="{enqueuedChart}"/>
+						</s:NavigatorContent>
+						
+						<s:NavigatorContent width="100%" height="100%" label="Inprocess">
+							<mx:Legend x="138" y="294" dataProvider="{inprocessChart}"/>
+							<mx:ColumnChart id="inprocessChart" x="236" y="14" width="378" height="337" dataProvider="{monthlyFilesTranscoded_inprocess}">
+								<mx:horizontalAxis>
+									<mx:CategoryAxis 
+										dataProvider="{monthlyFilesTranscoded_inprocess}" 
+										categoryField="MONTH"
+										/>
+								</mx:horizontalAxis>
+								<mx:series>
+									<mx:ColumnSeries displayName="Inprocess Files" yField="total"/>
+								</mx:series>
+							</mx:ColumnChart>
+						</s:NavigatorContent>
+						
+						<s:NavigatorContent width="100%" height="100%" label="Successfully Completed">
+							<mx:ColumnChart id="completedChart" x="236" y="10" width="378" height="337" dataProvider="{monthlyFilesTranscoded_successful}">
+								<mx:horizontalAxis>
+									<mx:CategoryAxis 
+										dataProvider="{monthlyFilesTranscoded_successful}" 
+										categoryField="MONTH"
+										/>
+								</mx:horizontalAxis>
+								<mx:series>
+									<mx:ColumnSeries displayName="Completed Files" yField="total"/>
+								</mx:series>
+							</mx:ColumnChart>
+							<mx:Legend x="138" y="294" dataProvider="{completedChart}"/>
+							
+						</s:NavigatorContent>
+						
+						<s:NavigatorContent width="100%" height="100%" label="Conversion paused">
+							<mx:ColumnChart id="pausedChart" x="236" y="10" width="378" height="337" dataProvider="{monthlyFilesTranscoded_paused}">
+								<mx:horizontalAxis>
+									<mx:CategoryAxis 
+										dataProvider="{monthlyFilesTranscoded_paused}" 
+										categoryField="MONTH"
+										/>
+								</mx:horizontalAxis>
+								<mx:series>
+									<mx:ColumnSeries displayName="Paused Files" yField="total"/>
+								</mx:series>
+							</mx:ColumnChart>
+							<mx:Legend x="138" y="294" dataProvider="{pausedChart}"/>
+						</s:NavigatorContent>
+						
+						<s:NavigatorContent width="100%" height="100%" label="Failed">
+							<mx:ColumnChart id="FailedChart" x="236" y="10" width="378" height="337" dataProvider="{monthlyFilesTranscoded_fail}">
+								<mx:horizontalAxis>
+									<mx:CategoryAxis 
+										dataProvider="{monthlyFilesTranscoded_fail}" 
+										categoryField="MONTH"
+										/>
+								</mx:horizontalAxis>
+								<mx:series>
+									<mx:ColumnSeries displayName="Failed Files" yField="total"/>
+								</mx:series>
+							</mx:ColumnChart>
+							<mx:Legend x="138" y="294" dataProvider="{FailedChart}"/>
+						</s:NavigatorContent>
+					</mx:ViewStack>
+					</s:Panel>
+			</mx:Canvas>
+			
+			</mx:ViewStack>
+	
+	
+	
+</mx:Application>
